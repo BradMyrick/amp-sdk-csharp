@@ -70,7 +70,7 @@ amp.On<MatchFound>("match_found", async match =>
 // 5. LISTEN FOR RESULT — rating update
 // ═══════════════════════════════════════════════════════════════
 
-amp.On<JsonElement>("match_result", result =>
+amp.OnJson("match_result", result =>
 {
     var you = result.GetProperty("you");
     Console.WriteLine($"\n{(result.GetProperty("won").GetBoolean() ? "🏆" : "💀")} " +

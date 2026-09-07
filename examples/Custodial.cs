@@ -1,4 +1,4 @@
-// Example: Custodial / Fiat-Friendly Integration
+// Example: Custodial / Fiat-Friendly Integration (pattern, not runnable)
 //
 // For games where players don't have crypto wallets.
 // The game studio implements IAMPCustodialProvider to handle

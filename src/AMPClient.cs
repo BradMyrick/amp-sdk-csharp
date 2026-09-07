@@ -237,6 +237,96 @@ public class AMPClient : IDisposable
     public Task<JsonElement> MultiClaimAsync(string matchId)
         => _rest.PostAsync<JsonElement>($"/v1/multi/{matchId}/claim");
 
+    // ── Exit certificates (multiplayer death certs) ────
+
+    /// <summary>
+    /// Submit an exit certificate: an eliminated player signs their rank,
+    /// exit frame, and state hash, then disconnects. Auto-signs EIP-191.
+    /// </summary>
+    public async Task<JsonElement> SubmitExitCertAsync(
+        string matchId, int rank, long exitFrame, string stateHash)
+    {
+        var message = CryptoHelpers.BuildExitCertMessage(matchId, rank, exitFrame, stateHash);
+        string? signature = null;
+        if (_signer != null)
+            signature = await _signer.SignPersonalSign(message);
+        else if (_custodial != null && _playerId != null)
+            signature = await _custodial.SignPersonalSign(_playerId, message);
+
+        var body = new { rank, exitFrame, stateHash, signature };
+        return await _rest.PostAsync<JsonElement>($"/v1/multi/{matchId}/exit", body);
+    }
+
+    /// <summary>
+    /// Countersign another player's exit certificate as a survivor,
+    /// verifying their state hash against your own simulation.
+    /// </summary>
+    public Task<JsonElement> CountersignExitCertAsync(
+        string matchId, string wallet, string stateHash)
+        => _rest.PostAsync<JsonElement>($"/v1/multi/{matchId}/exit/{wallet}",
+            new { stateHash });
+
+    // ── Staked 1v1 escrow ──────────────────────────────
+
+    /// <summary>
+    /// Verify on-chain escrow for a staked 1v1 match (participant only).
+    /// Flips an escrow_pending match to live once both deposits check out.
+    /// </summary>
+    public Task<JsonElement> VerifyEscrowAsync(string matchId)
+        => _rest.PostAsync<JsonElement>($"/v1/matches/{matchId}/escrow/verify", new { });
+
+    // ── Convenience ────────────────────────────────────
+
+    /// <summary>
+    /// Wait for a match assignment after joining a queue. Listens on the
+    /// WebSocket (with a REST polling fallback) and completes as soon as
+    /// the match is found. Throws TimeoutException on expiry.
+    /// </summary>
+    public async Task<MatchFound> WaitForMatchAsync(TimeSpan? timeout = null)
+    {
+        timeout ??= TimeSpan.FromSeconds(30);
+        var tcs = new TaskCompletionSource<MatchFound>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cts = new CancellationTokenSource(timeout.Value);
+
+        var sub = On<MatchFound>("match_found", m => tcs.TrySetResult(m));
+
+        // REST fallback poller (2 s) via me().liveMatchId
+        var poller = Task.Run(async () =>
+        {
+            while (!cts.IsCancellationRequested && !tcs.Task.IsCompleted)
+            {
+                try
+                {
+                    var me = await MeAsync();
+                    if (me.LiveMatchId != null)
+                    {
+                        var m = await GetMatchAsync(me.LiveMatchId);
+                        tcs.TrySetResult(new MatchFound
+                        {
+                            MatchId = m.MatchId,
+                            Bot = m.Bot,
+                            ExpiresAt = m.ExpiresAt,
+                        });
+                        break;
+                    }
+                }
+                catch { /* keep polling */ }
+                await Task.Delay(TimeSpan.FromSeconds(2), cts.Token);
+            }
+        });
+
+        var timeoutTask = Task.Delay(timeout.Value, cts.Token);
+        var done = await Task.WhenAny(tcs.Task, timeoutTask);
+        cts.Cancel();
+        sub.Dispose();
+        try { await poller; } catch { /* cancelled */ }
+
+        if (done != tcs.Task)
+            throw new TimeoutException($"WaitForMatchAsync timed out after {timeout.Value.TotalSeconds:F0}s");
+
+        return tcs.Task.Result;
+    }
+
     // ── Events (WebSocket) ──────────────────────────────
 
     /// <summary>
@@ -253,6 +343,19 @@ public class AMPClient : IDisposable
             _ = _ws.ConnectAsync();
         }
         return _ws.On(eventType, handler);
+    }
+
+    /// <summary>Subscribe with the raw JSON payload (struct-safe).</summary>
+    public IDisposable OnJson(string eventType, Action<JsonElement> handler)
+    {
+        if (_ws == null)
+        {
+            var token = _rest.Token
+                ?? throw new InvalidOperationException("Must call LoginAsync() before subscribing to events");
+            _ws = new AmpWebSocket(_baseUrl, token);
+            _ = _ws.ConnectAsync();
+        }
+        return _ws.OnJson(eventType, handler);
     }
 
     /// <summary>Disconnect the WebSocket.</summary>

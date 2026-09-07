@@ -38,6 +38,26 @@ public class AmpWebSocket : IDisposable
         return new Subscription(() => _handlers[eventType].Remove(wrapper.Invoke));
     }
 
+    /// <summary>
+    /// Subscribe with the raw JSON payload — for untyped handling or
+    /// struct payloads like <see cref="JsonElement"/> (which can't be
+    /// used with the typed <see cref="On{T}"/> constraint).
+    /// </summary>
+    public IDisposable OnJson(string eventType, Action<JsonElement> handler)
+    {
+        if (!_handlers.ContainsKey(eventType))
+            _handlers[eventType] = new();
+
+        Task Wrapper(JsonElement el)
+        {
+            handler(el);
+            return Task.CompletedTask;
+        }
+
+        _handlers[eventType].Add(Wrapper);
+        return new Subscription(() => _handlers[eventType].Remove(Wrapper));
+    }
+
     public async Task ConnectAsync()
     {
         if (_closed) return;

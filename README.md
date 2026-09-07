@@ -108,8 +108,13 @@ amp.On<JsonElement>("match_result", result =>
 | `MultiCommitAsync(gameId, stakeWei, lobbySize)` | Commit to FFA queue (returns salt) |
 | `MultiRevealAsync(gameId, rulesetId, salt)` | Reveal commit |
 | `MultiReportAsync(matchId, ranked, ...)` | Submit N-player ladder (auto-signs EIP-712) |
+| `SubmitExitCertAsync(matchId, rank, exitFrame, stateHash)` | Submit a death cert on elimination (auto-signs EIP-191) |
+| `CountersignExitCertAsync(matchId, wallet, stateHash)` | Survivor verifies an exit cert |
+| `VerifyEscrowAsync(matchId)` | Verify on-chain escrow for staked 1v1 (flips to live) |
 | `MultiClaimAsync(matchId)` | Trigger settlement |
+| `WaitForMatchAsync(timeout?)` | One call: queue → wait → `MatchFound` (WS + REST fallback) |
 | `On<T>(eventType, handler)` | Subscribe to WebSocket event (returns IDisposable) |
+| `OnJson(eventType, handler)` | Subscribe with raw JSON (struct-safe) |
 | `Disconnect()` | Close WebSocket |
 
 ### WebSocket Events

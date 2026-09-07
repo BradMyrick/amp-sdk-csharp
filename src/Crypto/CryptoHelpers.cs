@@ -21,6 +21,18 @@ public static class CryptoHelpers
         => $"AMP_REPORT:v1:{matchId}:{result}";
 
     /// <summary>
+    /// Build the EIP-191 message for a multiplayer exit certificate
+    /// (death cert). Must match amp-server's submit_exit_cert exactly.
+    /// </summary>
+    public static string BuildExitCertMessage(string matchId, int rank, long exitFrame, string stateHash)
+        => "AMP exit certificate\n\n"
+            + $"Match: {matchId}\n"
+            + $"Rank: {rank}\n"
+            + $"Exit frame: {exitFrame}\n"
+            + $"State hash: {stateHash}\n\n"
+            + "This signature is free. It certifies your elimination and unlocks your reporting bond.";
+
+    /// <summary>
     /// Compute the commit-reveal hash: keccak256(address ‖ stake ‖ salt).
     /// Uses Nethereum's Sha3Keccack for the hash and address encoding.
     /// </summary>
