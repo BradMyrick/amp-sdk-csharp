@@ -1,0 +1,24 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
+  <metadata>
+    <id>Amp.Sdk</id>
+    <version>0.1.0</version>
+    <authors>AmpSdk</authors>
+    <license type="expression">Apache-2.0</license>
+    <licenseUrl>https://licenses.nuget.org/Apache-2.0</licenseUrl>
+    <description>AMP SDK — ranked matchmaking, skill ratings, and on-chain settlement for games on Avalanche. Works with Unity, Godot, and .NET.</description>
+    <tags>amp matchmaking avalanche gaming multiplayer web3 glicko skill-rating queue party escrow unity godot</tags>
+    <repository type="git" url="https://github.com/BradMyrick/amp-sdk-csharp" commit="2624bb71caa9d7a8c5b3edc917df89b91d2aed94" />
+    <dependencies>
+      <group targetFramework="net8.0">
+        <dependency id="Nethereum.Signer" version="4.26.0" exclude="Build,Analyzers" />
+        <dependency id="Nethereum.Web3" version="4.26.0" exclude="Build,Analyzers" />
+        <dependency id="System.Net.Http.Json" version="9.0.0" exclude="Build,Analyzers" />
+      </group>
+    </dependencies>
+  </metadata>
+  <files>
+    <file src="/home/kodr/Repos/amp-sdk-csharp/bin/Debug/net8.0/AmpSdk.dll" target="lib/net8.0/AmpSdk.dll" />
+    <file src="/home/kodr/Repos/amp-sdk-csharp/README.md" target="/README.md" />
+  </files>
+</package>
