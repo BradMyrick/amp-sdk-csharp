@@ -217,7 +217,7 @@ public class AMPClient : IDisposable
         {
             var typedData = CryptoHelpers.BuildLadderTypedData(
                 chainId ?? 43113,
-                contractAddress ?? "0xcabf7b626172fE55d54f03c346563671AbcC77f7",
+                contractAddress ?? "0x3BBb1812Ccafc4a8c849BfA340174a271e43B7D1",
                 matchId,
                 gameId: "0x" + new string('0', 63) + "1",
                 rankedPlacements: ranked.Select(r => r.wallet).ToArray(),
