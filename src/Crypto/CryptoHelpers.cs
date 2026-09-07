@@ -9,29 +9,49 @@ namespace Amp.Sdk.Crypto;
 /// </summary>
 public static class CryptoHelpers
 {
-    /// <summary>
-    /// Generate a cryptographically random salt for commit-reveal.
-    /// Returns 32 bytes as a hex string (0x-prefixed).
-    /// </summary>
+    /// <summary>Generate a cryptographically random salt (32 bytes, 0x-prefixed hex).</summary>
     public static string GenerateSalt()
     {
         var bytes = RandomNumberGenerator.GetBytes(32);
         return "0x" + Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
-    /// <summary>
-    /// Build the EIP-191 message for a 1v1 match report.
-    /// Matches the amp-server's report_message function.
-    /// </summary>
+    /// <summary>Build the EIP-191 message for a 1v1 match report.</summary>
     public static string BuildReportMessage(string matchId, string result)
-    {
-        return $"AMP_REPORT:v1:{matchId}:{result}";
-    }
+        => $"AMP_REPORT:v1:{matchId}:{result}";
 
     /// <summary>
-    /// Build EIP-712 typed data for a MultiplayerLadder signature.
-    /// Matches the amp-server's ladder.rs and AMPMultiplayer contract.
+    /// Compute the commit-reveal hash: keccak256(address ‖ stake ‖ salt).
+    /// Uses Nethereum's Sha3Keccack for the hash and address encoding.
     /// </summary>
+    public static async Task<string> ComputeCommitHashAsync(
+        string wallet, long stakeWei, string salt)
+    {
+        var keccak = new Nethereum.Util.Sha3Keccack();
+
+        // Address → 20 bytes
+        var addrHex = wallet.Replace("0x", "").Replace("0X", "");
+        var addrBytes = new byte[20];
+        for (var i = 0; i < 20; i++)
+            addrBytes[i] = Convert.ToByte(addrHex.Substring(i * 2, 2), 16);
+
+        // Stake → 8 bytes big-endian
+        var stakeBytes = BitConverter.GetBytes(stakeWei).Reverse().ToArray();
+
+        // Salt → UTF-8 bytes
+        var saltBytes = Encoding.UTF8.GetBytes(salt);
+
+        // Concatenate and hash
+        var input = new byte[addrBytes.Length + stakeBytes.Length + saltBytes.Length];
+        Array.Copy(addrBytes, 0, input, 0, addrBytes.Length);
+        Array.Copy(stakeBytes, 0, input, addrBytes.Length, stakeBytes.Length);
+        Array.Copy(saltBytes, 0, input, addrBytes.Length + stakeBytes.Length, saltBytes.Length);
+
+        var hash = keccak.CalculateHash(input);
+        return "0x" + Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    /// <summary>Build EIP-712 typed data for a MultiplayerLadder signature.</summary>
     public static Eip712TypedData BuildLadderTypedData(
         long chainId,
         string contractAddress,
@@ -69,24 +89,18 @@ public static class CryptoHelpers
         );
     }
 
-    /// <summary>
-    /// Convert a UTF-8 string to hex (for personal_sign params).
-    /// </summary>
+    /// <summary>Convert a UTF-8 string to hex (for personal_sign params).</summary>
     public static string ToHex(string str)
     {
         var bytes = Encoding.UTF8.GetBytes(str);
         return "0x" + Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
-    /// <summary>
-    /// Zero-pad a value to 32 bytes (for matchId/gameId bytes32 fields).
-    /// </summary>
+    /// <summary>Zero-pad a long value to a 32-byte hex string (bytes32).</summary>
     public static string ToBytes32(long value)
     {
         var bytes = new byte[32];
-        var valueBytes = BitConverter.GetBytes(value);
-        if (BitConverter.IsLittleEndian)
-            Array.Reverse(valueBytes);
+        var valueBytes = BitConverter.GetBytes(value).Reverse().ToArray();
         Array.Copy(valueBytes, 0, bytes, 32 - valueBytes.Length, valueBytes.Length);
         return "0x" + Convert.ToHexString(bytes).ToLowerInvariant();
     }

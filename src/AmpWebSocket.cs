@@ -6,7 +6,8 @@ namespace Amp.Sdk;
 
 /// <summary>
 /// WebSocket client with exponential-backoff auto-reconnect.
-/// Event-driven — subscribe with On<T>(eventName, handler).
+/// Event-driven — subscribe with On&lt;T&gt;(eventName, handler).
+/// Returns a disposable per subscription for clean unsubscription.
 /// </summary>
 public class AmpWebSocket : IDisposable
 {
@@ -15,7 +16,6 @@ public class AmpWebSocket : IDisposable
     private bool _closed;
     private int _attempt;
     private readonly CancellationTokenSource _cts = new();
-
     private readonly Dictionary<string, List<Func<JsonElement, Task>>> _handlers = new();
 
     public AmpWebSocket(string baseUrl, string token)
@@ -24,18 +24,18 @@ public class AmpWebSocket : IDisposable
         _url = $"{wsUrl}/v1/ws?token={Uri.EscapeDataString(token)}";
     }
 
-    public void On<T>(string eventType, Action<T> handler) where T : class
+    /// <summary>
+    /// Subscribe to an event. Returns a disposable that unsubscribes on dispose.
+    /// </summary>
+    public IDisposable On<T>(string eventType, Action<T> handler) where T : class
     {
         if (!_handlers.ContainsKey(eventType))
             _handlers[eventType] = new();
 
-        _handlers[eventType].Add(async (data) =>
-        {
-            var typed = data.Deserialize<T>();
-            if (typed != null)
-                handler(typed);
-            await Task.CompletedTask;
-        });
+        var wrapper = new HandlerWrapper<T>(handler);
+        _handlers[eventType].Add(wrapper.Invoke);
+
+        return new Subscription(() => _handlers[eventType].Remove(wrapper.Invoke));
     }
 
     public async Task ConnectAsync()
@@ -58,7 +58,7 @@ public class AmpWebSocket : IDisposable
     private async Task ReceiveLoop()
     {
         var buffer = new byte[8192];
-        var sb = new StringBuilder();
+        var message = new StringBuilder();
 
         try
         {
@@ -68,16 +68,16 @@ public class AmpWebSocket : IDisposable
 
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
-                    await ReconnectAsync();
+                    _ = ReconnectAsync();
                     return;
                 }
 
-                sb.Append(Encoding.UTF8.GetString(buffer, 0, result.Count));
+                message.Append(Encoding.UTF8.GetString(buffer, 0, result.Count));
 
                 if (result.EndOfMessage)
                 {
-                    var json = sb.ToString();
-                    sb.Clear();
+                    var json = message.ToString();
+                    message.Clear();
                     ProcessMessage(json);
                 }
             }
@@ -85,7 +85,7 @@ public class AmpWebSocket : IDisposable
         catch (OperationCanceledException) { }
         catch
         {
-            await ReconnectAsync();
+            _ = ReconnectAsync();
         }
     }
 
@@ -99,7 +99,7 @@ public class AmpWebSocket : IDisposable
 
             if (eventType != null && _handlers.TryGetValue(eventType, out var handlers))
             {
-                foreach (var handler in handlers)
+                foreach (var handler in handlers.ToList())
                 {
                     _ = handler(data);
                 }
@@ -114,8 +114,12 @@ public class AmpWebSocket : IDisposable
 
         _attempt++;
         var delay = Math.Min(1000 * Math.Pow(2, _attempt), 15000);
-        await Task.Delay(TimeSpan.FromMilliseconds(delay));
-        await ConnectAsync();
+        try
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(delay), _cts.Token);
+            await ConnectAsync();
+        }
+        catch (OperationCanceledException) { }
     }
 
     public void Dispose()
@@ -124,5 +128,21 @@ public class AmpWebSocket : IDisposable
         _cts.Cancel();
         _ws?.Dispose();
         _handlers.Clear();
+    }
+
+    private class HandlerWrapper<T>(Action<T> handler) where T : class
+    {
+        public Task Invoke(JsonElement data)
+        {
+            var typed = data.Deserialize<T>();
+            if (typed != null)
+                handler(typed);
+            return Task.CompletedTask;
+        }
+    }
+
+    private class Subscription(Action unsubscribe) : IDisposable
+    {
+        public void Dispose() => unsubscribe();
     }
 }

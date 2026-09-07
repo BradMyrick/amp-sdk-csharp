@@ -6,26 +6,13 @@ namespace Amp.Sdk;
 /// <summary>
 /// AMPClient — the main entry point for the AMP SDK.
 ///
-/// Handles the full lifecycle: wallet login, queue, match, report, settle.
-///
-/// <example>
-/// <code>
-/// var amp = new AMPClient(
-///     "https://amp.playwithamp.xyz",
-///     new PrivateKeySigner(privateKey)
-/// );
-/// await amp.LoginAsync();
-/// await amp.JoinQueueAsync("amp-tactics", "ranked-1v1");
-/// amp.On&lt;MatchFound&gt;("match_found", match =>
-/// {
-///     Console.WriteLine($"Matched! {match.Opponent.Wallet}");
-/// });
-/// </code>
-/// </example>
+/// Handles the full lifecycle: wallet login, queue, match, report, settle,
+/// party, multiplayer, and real-time events.
 /// </summary>
 public class AMPClient : IDisposable
 {
     private readonly AmpRestClient _rest;
+    private readonly string _baseUrl;
     private AmpWebSocket? _ws;
     private readonly IAMPSigner? _signer;
     private readonly IAMPCustodialProvider? _custodial;
@@ -42,7 +29,8 @@ public class AMPClient : IDisposable
         string? playerId = null,
         TimeSpan? timeout = null)
     {
-        _rest = new AmpRestClient(serverUrl, timeout);
+        _baseUrl = serverUrl.TrimEnd('/');
+        _rest = new AmpRestClient(_baseUrl, timeout);
         _signer = signer;
         _custodial = custodial;
         _playerId = playerId;
@@ -50,9 +38,7 @@ public class AMPClient : IDisposable
 
     // ── Auth ────────────────────────────────────────────
 
-    /// <summary>
-    /// Log in with the configured signer. Gasless — one EIP-191 signature.
-    /// </summary>
+    /// <summary>Log in with the configured signer. Gasless — one EIP-191 signature.</summary>
     public async Task<Player> LoginAsync()
     {
         if (_signer == null && _custodial == null)
@@ -107,8 +93,7 @@ public class AMPClient : IDisposable
 
     /// <summary>Join a ranked queue.</summary>
     public Task<QueueJoinResponse> JoinQueueAsync(string gameId, string rulesetId)
-        => _rest.PostAsync<QueueJoinResponse>("/v1/queue/join",
-            new { gameId, rulesetId });
+        => _rest.PostAsync<QueueJoinResponse>("/v1/queue/join", new { gameId, rulesetId });
 
     /// <summary>Leave the queue.</summary>
     public Task<JsonElement> LeaveQueueAsync()
@@ -122,7 +107,7 @@ public class AMPClient : IDisposable
     public Task<PlayBotResponse> PlayBotAsync()
         => _rest.PostAsync<PlayBotResponse>("/v1/queue/play-bot");
 
-    // ── Matches ─────────────────────────────────────────
+    // ── Matches (1v1) ───────────────────────────────────
 
     /// <summary>Get a match by ID.</summary>
     public Task<MatchView> GetMatchAsync(string matchId)
@@ -132,9 +117,7 @@ public class AMPClient : IDisposable
     public Task<JsonElement> MatchHistoryAsync(int limit = 20, int offset = 0)
         => _rest.GetAsync<JsonElement>($"/v1/matches/history?limit={limit}&offset={offset}");
 
-    /// <summary>
-    /// Report a 1v1 match result. Auto-signs with EIP-191 if a signer is available.
-    /// </summary>
+    /// <summary>Report a 1v1 match result. Auto-signs with EIP-191.</summary>
     public async Task<MatchReportResponse> ReportMatchAsync(
         string matchId, string result, string? transcriptHash = null)
     {
@@ -180,37 +163,103 @@ public class AMPClient : IDisposable
     public Task<JsonElement> DisbandPartyAsync(string partyId)
         => _rest.PostAsync<JsonElement>($"/v1/parties/{partyId}/disband");
 
+    // ── Multiplayer (N-player) ──────────────────────────
+
+    /// <summary>
+    /// Commit to a staked FFA queue. Generates a salt internally and
+    /// returns it for the reveal phase.
+    /// </summary>
+    public async Task<MultiCommitResponse> MultiCommitAsync(
+        string gameId, long stakeWei, int lobbySize)
+    {
+        var salt = CryptoHelpers.GenerateSalt();
+        var wallet = _wallet ?? throw new InvalidOperationException("Must call LoginAsync() first");
+
+        // Compute the commit hash: keccak256(addr ‖ stake ‖ salt)
+        var commitHash = await CryptoHelpers.ComputeCommitHashAsync(wallet, stakeWei, salt);
+
+        var result = await _rest.PostAsync<JsonElement>("/v1/multi/commit",
+            new { gameId, commitHash, stakeWei, lobbySize });
+
+        return new MultiCommitResponse
+        {
+            Committed = result.GetProperty("committed").GetBoolean(),
+            CommittedCount = result.GetProperty("committedCount").GetInt32(),
+            Ready = result.GetProperty("ready").GetBoolean(),
+            Salt = salt,
+        };
+    }
+
+    /// <summary>Reveal your commit salt.</summary>
+    public Task<JsonElement> MultiRevealAsync(string gameId, string rulesetId, string salt)
+        => _rest.PostAsync<JsonElement>("/v1/multi/reveal",
+            new { gameId, rulesetId, salt });
+
+    /// <summary>Get a multiplayer match.</summary>
+    public Task<JsonElement> GetMultiMatchAsync(string matchId)
+        => _rest.GetAsync<JsonElement>($"/v1/multi/{matchId}");
+
+    /// <summary>
+    /// Report a multiplayer ladder. Auto-signs EIP-712 typed data.
+    /// </summary>
+    public async Task<JsonElement> MultiReportAsync(
+        string matchId,
+        (string wallet, int rank)[] ranked,
+        string transcriptHash,
+        long sessionNonce,
+        long? chainId = null,
+        string? contractAddress = null)
+    {
+        string? signature = null;
+        var rankedArray = ranked.Select(r => new object[] { r.wallet, r.rank }).ToArray();
+
+        if (_signer != null || (_custodial != null && _playerId != null))
+        {
+            var typedData = CryptoHelpers.BuildLadderTypedData(
+                chainId ?? 43113,
+                contractAddress ?? "0xcabf7b626172fE55d54f03c346563671AbcC77f7",
+                matchId,
+                gameId: "0x" + new string('0', 63) + "1",
+                rankedPlacements: ranked.Select(r => r.wallet).ToArray(),
+                transcriptHash,
+                sessionNonce);
+
+            signature = _signer != null
+                ? await _signer.SignTypedData(typedData)
+                : await _custodial!.SignTypedData(_playerId!, typedData);
+        }
+
+        return await _rest.PostAsync<JsonElement>($"/v1/multi/{matchId}/report",
+            new { ranked = rankedArray, transcriptHash, sessionNonce, signature });
+    }
+
+    /// <summary>Trigger settlement for a quorum-reached multiplayer match.</summary>
+    public Task<JsonElement> MultiClaimAsync(string matchId)
+        => _rest.PostAsync<JsonElement>($"/v1/multi/{matchId}/claim");
+
     // ── Events (WebSocket) ──────────────────────────────
 
     /// <summary>
     /// Subscribe to a WebSocket event. Connects automatically on first subscription.
+    /// Returns a disposable that unsubscribes when disposed.
     /// </summary>
-    public void On<T>(string eventType, Action<T> handler) where T : class
+    public IDisposable On<T>(string eventType, Action<T> handler) where T : class
     {
         if (_ws == null)
         {
             var token = _rest.Token
                 ?? throw new InvalidOperationException("Must call LoginAsync() before subscribing to events");
-            var baseUrl = ExtractBaseUrl();
-            _ws = new AmpWebSocket(baseUrl, token);
+            _ws = new AmpWebSocket(_baseUrl, token);
             _ = _ws.ConnectAsync();
         }
-        _ws.On(eventType, handler);
+        return _ws.On(eventType, handler);
     }
 
-    private string ExtractBaseUrl()
+    /// <summary>Disconnect the WebSocket.</summary>
+    public void Disconnect()
     {
-        // Extract base URL from the REST client via reflection or re-store it
-        // For simplicity, we store it in construction
-        return _baseUrlCache ?? "https://amp.playwithamp.xyz";
-    }
-
-    private string? _baseUrlCache;
-
-    public AMPClient WithBaseUrl(string baseUrl)
-    {
-        _baseUrlCache = baseUrl;
-        return this;
+        _ws?.Dispose();
+        _ws = null;
     }
 
     public void Dispose()
@@ -218,4 +267,13 @@ public class AMPClient : IDisposable
         _rest.Dispose();
         _ws?.Dispose();
     }
+}
+
+/// <summary>Response from MultiCommitAsync — includes the generated salt for reveal.</summary>
+public class MultiCommitResponse
+{
+    public bool Committed { get; set; }
+    public int CommittedCount { get; set; }
+    public bool Ready { get; set; }
+    public string Salt { get; set; } = "";
 }

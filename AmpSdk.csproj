@@ -16,6 +16,7 @@
   <ItemGroup>
     <PackageReference Include="Nethereum.Web3" Version="4.26.0" />
     <PackageReference Include="Nethereum.Signer" Version="4.26.0" />
+    <PackageReference Include="Nethereum.Signer.EIP712" Version="4.26.0" />
     <PackageReference Include="System.Net.Http.Json" Version="9.0.0" />
   </ItemGroup>
 
