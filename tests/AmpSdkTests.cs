@@ -62,6 +62,19 @@ public class CryptoTests
     }
 
     [Fact]
+    public async Task ComputeCommitHash_MatchesCrossSdkGoldenVector()
+    {
+        // Identical in the TS/C#/C++/Rust SDKs and amp-server:
+        // keccak256(addr20 | stake_u64_be(8) | salt-utf8)
+        var h = await CryptoHelpers.ComputeCommitHashAsync(
+            "0x95CC495dF579981d3Ffa4a8f77B93A17563E077a",
+            1_000_000_000_000_000, "0xdeadbeef");
+        Assert.Equal(
+            "0x2d5491f1ad0117eea0c302b3cfb07590fef2d3892349e017361afd1bb5e5be10",
+            h.ToLowerInvariant());
+    }
+
+    [Fact]
     public async Task ComputeCommitHash_IsInputSensitive()
     {
         var wallet = "0x95CC495dF579981d3Ffa4a8f77B93A17563E077a";
