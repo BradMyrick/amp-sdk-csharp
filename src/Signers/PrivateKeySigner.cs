@@ -53,7 +53,11 @@ public class PrivateKeySigner : IAMPSigner
         return Task.FromResult("0x" + sig.ToHex(false).ToLowerInvariant());
     }
 
-    private static byte[] ComputeEip712Digest(Eip712TypedData td)
+    /// <summary>
+    /// EIP-712 digest (domain separator ‖ hashStruct). Pure — exposed for
+    /// cross-SDK conformance testing against the ethers golden vector.
+    /// </summary>
+    public static byte[] ComputeEip712Digest(Eip712TypedData td)
     {
         var domainSep = ComputeDomainSeparator(td);
         var structHash = ComputeStructHash(td);
@@ -169,12 +173,12 @@ public class PrivateKeySigner : IAMPSigner
     private static byte[] BigIntegerToWord32(BigInteger value)
     {
         if (value.Sign < 0) value = BigInteger.Zero;
-        var bytes = value.ToByteArray(); // little-endian
+        var bytes = value.ToByteArray(); // little-endian, minimal length
         if (bytes.Length > 32) bytes = bytes[^32..];
         var word = new byte[32];
-        // bytes are little-endian, reverse for big-endian
+        // Right-align: reverse the little-endian bytes into word[32-len .. 31]
         for (var i = 0; i < bytes.Length; i++)
-            word[bytes.Length - 1 - i] = bytes[i];
+            word[32 - bytes.Length + i] = bytes[bytes.Length - 1 - i];
         return word;
     }
 
