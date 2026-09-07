@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>12</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <PackageId>Amp.Sdk</PackageId>
+    <Version>0.1.0</Version>
+    <Description>AMP SDK — ranked matchmaking, skill ratings, and on-chain settlement for games on Avalanche. Works with Unity, Godot, and .NET.</Description>
+    <PackageTags>amp;matchmaking;avalanche;gaming;multiplayer;web3;glicko;skill-rating;queue;party;escrow;unity;godot</PackageTags>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/BradMyrick/amp-sdk-csharp</RepositoryUrl>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Nethereum.Web3" Version="4.26.0" />
+    <PackageReference Include="Nethereum.Signer" Version="4.26.0" />
+    <PackageReference Include="System.Net.Http.Json" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>
