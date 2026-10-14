@@ -19,9 +19,13 @@ public class PrivateKeySigner : IAMPSigner
     private readonly string _address;
     private static readonly Sha3Keccack Keccak = new();
 
+    public string PrivateKeyHex { get; }
+    public EthECKey Key => _key;
+
     public PrivateKeySigner(string privateKey)
     {
-        _key = new EthECKey(privateKey.EnsureHexPrefix());
+        PrivateKeyHex = privateKey.EnsureHexPrefix();
+        _key = new EthECKey(PrivateKeyHex);
         _address = _key.GetPublicAddress();
     }
 
@@ -141,7 +145,8 @@ public class PrivateKeySigner : IAMPSigner
             string[] arr => arr.Select(s => (object)s).ToList(),
             System.Text.Json.JsonElement je when je.ValueKind == System.Text.Json.JsonValueKind.Array
                 => je.EnumerateArray().Select(e => (object)e).ToList(),
-            List<string> list => list.Select(s => (object)s).ToList(),
+            IEnumerable<string> strEnum => strEnum.Select(s => (object)s).ToList(),
+            IEnumerable<object> objEnum => objEnum.ToList(),
             _ => new List<object>(),
         };
 
@@ -160,7 +165,9 @@ public class PrivateKeySigner : IAMPSigner
         return value switch
         {
             long l => l,
+            ulong ul => ul,
             int i => i,
+            uint u => u,
             BigInteger bi => bi,
             string s when BigInteger.TryParse(s, out var parsed) => parsed,
             System.Text.Json.JsonElement je when je.ValueKind == System.Text.Json.JsonValueKind.Number

@@ -6,8 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <PackageId>Amp.Sdk</PackageId>
     <Version>0.1.0</Version>
-    <Description>AMP SDK — ranked matchmaking, skill ratings, and on-chain settlement for games on Avalanche. Works with Unity, Godot, and .NET.</Description>
-    <PackageTags>amp;matchmaking;avalanche;gaming;multiplayer;web3;glicko;skill-rating;queue;party;escrow;unity;godot</PackageTags>
+    <Description>AMP SDK — Avalanche Tournament &amp; Match Protocol: on-chain prize pools, EIP-712 attestations, pull-payment claims, and ranked matchmaking on Avalanche. Works with Unity, Godot, and .NET.</Description>
+    <PackageTags>amp;tournament;avalanche;matchmaking;prize-pool;escrow;web3;glicko;eip712;unity;godot;dotnet</PackageTags>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/BradMyrick/amp-sdk-csharp</RepositoryUrl>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>

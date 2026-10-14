@@ -1,5 +1,7 @@
+using System.Numerics;
 using System.Security.Cryptography;
 using System.Text;
+using Amp.Sdk.Signers;
 
 namespace Amp.Sdk.Crypto;
 
@@ -115,5 +117,45 @@ public static class CryptoHelpers
         var valueBytes = BitConverter.GetBytes(value).Reverse().ToArray();
         Array.Copy(valueBytes, 0, bytes, 32 - valueBytes.Length, valueBytes.Length);
         return "0x" + Convert.ToHexString(bytes).ToLowerInvariant();
+    }
+
+    /// <summary>Build EIP-712 typed data for a TournamentResult signature (AMPTournamentCup).</summary>
+    public static Eip712TypedData BuildTournamentResultTypedData(
+        long chainId,
+        string contractAddress,
+        BigInteger tournamentId,
+        string[] winners)
+    {
+        return new Eip712TypedData(
+            Name: "AMPTournamentCup",
+            Version: "1",
+            ChainId: chainId,
+            VerifyingContract: contractAddress,
+            PrimaryType: "TournamentResult",
+            Types: new Dictionary<string, TypedDataField[]>
+            {
+                ["TournamentResult"] = new[]
+                {
+                    new TypedDataField("tournamentId", "uint256"),
+                    new TypedDataField("winners", "address[]"),
+                },
+            },
+            Message: new Dictionary<string, object>
+            {
+                ["tournamentId"] = tournamentId,
+                ["winners"] = winners,
+            }
+        );
+    }
+
+    /// <summary>Compute the 32-byte EIP-712 digest for a TournamentResult attestation.</summary>
+    public static byte[] ComputeTournamentResultDigest(
+        long chainId,
+        string contractAddress,
+        BigInteger tournamentId,
+        string[] winners)
+    {
+        var td = BuildTournamentResultTypedData(chainId, contractAddress, tournamentId, winners);
+        return PrivateKeySigner.ComputeEip712Digest(td);
     }
 }

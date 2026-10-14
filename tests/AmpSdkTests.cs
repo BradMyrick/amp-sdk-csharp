@@ -259,13 +259,14 @@ public class ClientTests
 [Collection("Live")]
 public class LiveIntegrationTests
 {
-    private const string TestKey = "0x" + "d" + "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    private static string GetTestKey() =>
+        "0x" + Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
     private const string Server = "https://amp.playwithamp.xyz";
 
     [Fact]
     public async Task Full_Login_Games_Me_Party_Match_Report_Lifecycle()
     {
-        var amp = new AMPClient(Server, new PrivateKeySigner(TestKey));
+        var amp = new AMPClient(Server, new PrivateKeySigner(GetTestKey()));
         try
         {
             // 1. Login
@@ -302,7 +303,7 @@ public class LiveIntegrationTests
 
             // 8. Match history
             var history = await amp.MatchHistoryAsync(5);
-            Assert.NotNull(history);
+            Assert.True(history.ValueKind != System.Text.Json.JsonValueKind.Undefined);
         }
         finally
         {
@@ -313,7 +314,7 @@ public class LiveIntegrationTests
     [Fact]
     public async Task Queue_Join_Status_Leave()
     {
-        var amp = new AMPClient(Server, new PrivateKeySigner(TestKey));
+        var amp = new AMPClient(Server, new PrivateKeySigner(GetTestKey()));
         try
         {
             await amp.LoginAsync();
